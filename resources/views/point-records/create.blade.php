@@ -197,12 +197,6 @@
                     <p class="text-[11px] mt-2.5 text-slate-500" x-show="ocrRawText">
                         Texto bruto detectado: "<strong class="text-slate-700" x-text="ocrRawText"></strong>"
                     </p>
-
-                    {{-- Aviso de modo mock --}}
-                    <div x-show="ocrIsMocked" class="mt-2 flex items-center space-x-1.5 text-amber-700 bg-amber-100 px-3 py-1.5 rounded-lg">
-                        <span class="text-xs">🤖</span>
-                        <span class="text-[11px] font-semibold">Dados simulados (OCR_PROVIDER=fake) — confira e ajuste se necessário</span>
-                    </div>
                 </div>
             </div>
         </div>
@@ -320,7 +314,6 @@ function pointRegistrationApp() {
         ocrConfidence: null,
         ocrConfidencePercent: 0,
         ocrRawText: '',
-        ocrIsMocked: false,
 
         // ── Calendário ──
         calendarYear: 0,

@@ -112,10 +112,12 @@ class TesseractOcrService implements OcrServiceInterface
 
     private function fallbackExtract(string $imagePath, string $errorMessage): string
     {
+        $tz = config('app.timezone', 'America/Sao_Paulo');
+
         // Caso o binário do tesseract não esteja no sistema local,
         // simula reconhecimento com timestamp atual para não bloquear o fluxo
-        $today = Carbon::today()->format('d/m/Y');
-        $time = Carbon::now()->format('H:i');
+        $today = Carbon::today($tz)->format('d/m/Y');
+        $time  = Carbon::now($tz)->format('H:i');
 
         return "REGISTRO DE PONTO {$today} {$time} (Tesseract: {$errorMessage})";
     }
