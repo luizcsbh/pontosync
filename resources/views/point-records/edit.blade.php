@@ -20,14 +20,33 @@
         @csrf
         @method('PUT')
 
-        <div class="p-4 bg-slate-50 rounded-xl border border-slate-200">
+        <div class="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
             <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Detalhes da Marcação</span>
-            <div class="mt-2 flex items-center justify-between">
+            
+            <div class="flex items-center justify-between">
                 <span class="text-sm font-bold text-slate-800">{{ $record->type_label }}</span>
                 <span class="text-xs font-semibold text-slate-600 bg-white px-2.5 py-1 rounded-md border border-slate-200">{{ $workDay->date->format('d/m/Y') }}</span>
             </div>
+
+            <!-- Thumbnail do Comprovante (se existir) -->
+            @if ($record->image)
+                <div class="pt-2 border-t border-slate-200 flex items-center space-x-3">
+                    <a href="{{ $record->image->url }}" target="_blank" class="block relative group" title="Clique para abrir imagem original">
+                        <img src="{{ $record->image->url }}" alt="Comprovante" class="w-16 h-16 object-cover rounded-xl border border-slate-300 shadow-sm group-hover:opacity-80 transition">
+                        <span class="absolute inset-0 flex items-center justify-center bg-black/30 text-white text-xs opacity-0 group-hover:opacity-100 rounded-xl transition">🔍</span>
+                    </a>
+                    <div class="text-xs text-slate-600">
+                        <span class="font-bold block text-slate-800">📷 Comprovante Anexado</span>
+                        <span class="text-[11px] text-slate-400 block">Tamanho: {{ $record->image->formatted_size }}</span>
+                        @if ($record->ocr_confidence)
+                            <span class="text-[11px] text-emerald-600 font-semibold block">Confiança OCR: {{ round($record->ocr_confidence * 100) }}%</span>
+                        @endif
+                    </div>
+                </div>
+            @endif
+
             @if ($record->original_recorded_at)
-                <p class="text-[11px] text-amber-700 mt-2 bg-amber-50 p-2 rounded border border-amber-200">
+                <p class="text-[11px] text-amber-700 bg-amber-50 p-2 rounded-lg border border-amber-200">
                     ⚠ Horário original registrado: <strong>{{ $record->original_recorded_at->format('H:i') }}</strong>
                 </p>
             @endif

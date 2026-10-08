@@ -3,7 +3,7 @@
 @section('title', 'Dashboard')
 
 @section('content')
-<div class="space-y-6">
+<div class="space-y-6" x-data="{ photoModalOpen: false, modalImageUrl: '', modalTitle: '', modalDetails: '' }">
 
     <!-- Top Card / Header -->
     <div class="bg-gradient-to-r from-blue-600 to-indigo-700 rounded-3xl p-6 text-white shadow-lg relative overflow-hidden">
@@ -83,78 +83,53 @@
             @endif
         </div>
 
-        <!-- 4 Marcações Diárias -->
+        <!-- 4 Marcações Diárias com Thumbnails -->
         <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
             @php
                 $entry = $records->get('entry');
                 $lunchStart = $records->get('lunch_start');
                 $lunchEnd = $records->get('lunch_end');
                 $exit = $records->get('exit');
+                $list = [
+                    ['rec' => $entry, 'color' => 'emerald', 'label' => '🟢 Entrada'],
+                    ['rec' => $lunchStart, 'color' => 'amber', 'label' => '🟠 Saída Almoço'],
+                    ['rec' => $lunchEnd, 'color' => 'blue', 'label' => '🔵 Retorno Almoço'],
+                    ['rec' => $exit, 'color' => 'rose', 'label' => '🔴 Saída'],
+                ];
             @endphp
 
-            <!-- 1. Entrada -->
-            <div class="p-3.5 rounded-xl border {{ $entry ? 'border-emerald-200 bg-emerald-50/40' : 'border-slate-200 bg-slate-50/50' }} transition">
-                <div class="flex items-center justify-between text-xs text-slate-500">
-                    <span class="font-semibold text-emerald-600">🟢 Entrada</span>
-                    @if($entry)
-                        <a href="{{ route('point-records.edit', $entry->id) }}" class="text-[11px] text-blue-600 hover:underline">Editar</a>
-                    @endif
-                </div>
-                <div class="mt-2 text-xl font-black {{ $entry ? 'text-slate-900' : 'text-slate-300' }}">
-                    {{ $entry ? $entry->formatted_time : '--:--' }}
-                </div>
-                @if($entry)
-                    <span class="text-[10px] text-slate-400 block mt-0.5 capitalize">{{ $entry->source_label }}</span>
-                @endif
-            </div>
+            @foreach ($list as $item)
+                @php $r = $item['rec']; @endphp
+                <div class="p-3.5 rounded-xl border {{ $r ? 'border-'.$item['color'].'-200 bg-'.$item['color'].'-50/40' : 'border-slate-200 bg-slate-50/50' }} transition relative group">
+                    <div class="flex items-center justify-between text-xs text-slate-500">
+                        <span class="font-semibold text-{{ $item['color'] }}-600">{{ $item['label'] }}</span>
+                        @if($r)
+                            <a href="{{ route('point-records.edit', $r->id) }}" class="text-[11px] text-blue-600 hover:underline">Editar</a>
+                        @endif
+                    </div>
+                    
+                    <div class="mt-2 text-xl font-black {{ $r ? 'text-slate-900' : 'text-slate-300' }}">
+                        {{ $r ? $r->formatted_time : '--:--' }}
+                    </div>
 
-            <!-- 2. Saída Almoço -->
-            <div class="p-3.5 rounded-xl border {{ $lunchStart ? 'border-amber-200 bg-amber-50/40' : 'border-slate-200 bg-slate-50/50' }} transition">
-                <div class="flex items-center justify-between text-xs text-slate-500">
-                    <span class="font-semibold text-amber-600">🟠 Saída Almoço</span>
-                    @if($lunchStart)
-                        <a href="{{ route('point-records.edit', $lunchStart->id) }}" class="text-[11px] text-blue-600 hover:underline">Editar</a>
+                    @if($r)
+                        <div class="mt-1.5 flex items-center justify-between">
+                            <span class="text-[10px] text-slate-400 capitalize">{{ $r->source_label }}</span>
+                            
+                            <!-- Thumbnail da Foto (quando existir) -->
+                            @if ($r->image)
+                                <button type="button"
+                                        @click="modalImageUrl = '{{ $r->image->url }}'; modalTitle = '{{ $item['label'] }} ({{ $r->formatted_time }})'; modalDetails = 'Origem: {{ $r->source_label }}'; photoModalOpen = true;"
+                                        class="inline-flex items-center space-x-1 p-0.5 bg-white border border-slate-200 rounded-lg hover:border-blue-400 shadow-sm transition"
+                                        title="Ver foto do comprovante">
+                                    <img src="{{ $r->image->url }}" alt="Thumb" class="w-6 h-6 object-cover rounded">
+                                    <span class="text-[9px] text-slate-500 pr-1">📷</span>
+                                </button>
+                            @endif
+                        </div>
                     @endif
                 </div>
-                <div class="mt-2 text-xl font-black {{ $lunchStart ? 'text-slate-900' : 'text-slate-300' }}">
-                    {{ $lunchStart ? $lunchStart->formatted_time : '--:--' }}
-                </div>
-                @if($lunchStart)
-                    <span class="text-[10px] text-slate-400 block mt-0.5 capitalize">{{ $lunchStart->source_label }}</span>
-                @endif
-            </div>
-
-            <!-- 3. Retorno Almoço -->
-            <div class="p-3.5 rounded-xl border {{ $lunchEnd ? 'border-blue-200 bg-blue-50/40' : 'border-slate-200 bg-slate-50/50' }} transition">
-                <div class="flex items-center justify-between text-xs text-slate-500">
-                    <span class="font-semibold text-blue-600">🔵 Retorno Almoço</span>
-                    @if($lunchEnd)
-                        <a href="{{ route('point-records.edit', $lunchEnd->id) }}" class="text-[11px] text-blue-600 hover:underline">Editar</a>
-                    @endif
-                </div>
-                <div class="mt-2 text-xl font-black {{ $lunchEnd ? 'text-slate-900' : 'text-slate-300' }}">
-                    {{ $lunchEnd ? $lunchEnd->formatted_time : '--:--' }}
-                </div>
-                @if($lunchEnd)
-                    <span class="text-[10px] text-slate-400 block mt-0.5 capitalize">{{ $lunchEnd->source_label }}</span>
-                @endif
-            </div>
-
-            <!-- 4. Saída -->
-            <div class="p-3.5 rounded-xl border {{ $exit ? 'border-rose-200 bg-rose-50/40' : 'border-slate-200 bg-slate-50/50' }} transition">
-                <div class="flex items-center justify-between text-xs text-slate-500">
-                    <span class="font-semibold text-rose-600">🔴 Saída</span>
-                    @if($exit)
-                        <a href="{{ route('point-records.edit', $exit->id) }}" class="text-[11px] text-blue-600 hover:underline">Editar</a>
-                    @endif
-                </div>
-                <div class="mt-2 text-xl font-black {{ $exit ? 'text-slate-900' : 'text-slate-300' }}">
-                    {{ $exit ? $exit->formatted_time : '--:--' }}
-                </div>
-                @if($exit)
-                    <span class="text-[10px] text-slate-400 block mt-0.5 capitalize">{{ $exit->source_label }}</span>
-                @endif
-            </div>
+            @endforeach
         </div>
 
         <!-- Indicador de Próxima Ação -->
@@ -192,6 +167,34 @@
             <span class="text-lg sm:text-xl font-black mt-1 block {{ ($workDay->balance_minutes ?? 0) >= 0 ? 'text-emerald-600' : 'text-rose-600' }}">
                 {{ $workDay->formatted_balance }}
             </span>
+        </div>
+    </div>
+
+    <!-- Modal Lightbox de Visualização da Foto em Alta Resolução -->
+    <div x-show="photoModalOpen"
+         class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+         x-cloak
+         @keydown.escape.window="photoModalOpen = false">
+        <div class="bg-white rounded-3xl max-w-lg w-full overflow-hidden shadow-2xl border border-slate-100 animate-fadeIn"
+             @click.away="photoModalOpen = false">
+            <div class="p-4 border-b border-slate-100 flex items-center justify-between">
+                <div>
+                    <h3 class="font-bold text-slate-900 text-sm" x-text="modalTitle"></h3>
+                    <p class="text-[11px] text-slate-500" x-text="modalDetails"></p>
+                </div>
+                <button type="button" @click="photoModalOpen = false" class="text-slate-400 hover:text-slate-700 text-lg font-bold p-1">
+                    ✕
+                </button>
+            </div>
+            <div class="p-4 bg-slate-950 flex items-center justify-center min-h-[250px]">
+                <img :src="modalImageUrl" alt="Comprovante de Ponto" class="max-h-96 w-auto object-contain rounded-xl shadow">
+            </div>
+            <div class="p-3 bg-slate-50 text-right">
+                <button type="button" @click="photoModalOpen = false"
+                        class="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-800 font-semibold text-xs rounded-xl transition">
+                    Fechar
+                </button>
+            </div>
         </div>
     </div>
 

@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Facades\Storage;
 
 class PointImage extends Model
 {
@@ -39,6 +40,15 @@ class PointImage extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function getUrlAttribute(): string
+    {
+        if (Storage::disk($this->disk ?? 'public')->exists($this->path)) {
+            return Storage::disk($this->disk ?? 'public')->url($this->path);
+        }
+
+        return asset('storage/' . $this->path);
     }
 
     public function getFormattedSizeAttribute(): string
