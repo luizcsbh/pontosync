@@ -527,7 +527,6 @@ function pointRegistrationApp() {
 
             this.isProcessingOcr = true;
             this.ocrProcessed    = false;
-            this.ocrIsMocked     = false;
 
             const fd = new FormData();
             fd.append('photo', this.currentFile);
@@ -546,12 +545,11 @@ function pointRegistrationApp() {
 
                 if (res.success && res.data) {
                     // Usa a data do OCR mas mantém a do calendário se OCR não trouxer
-                    this.dateInput  = res.data.date || this.dateInput;
-                    this.timeInput  = res.data.time || this.timeInput;
+                    this.dateInput            = res.data.date || this.dateInput;
+                    this.timeInput            = res.data.time || this.timeInput;
                     this.ocrConfidence        = res.data.confidence;
                     this.ocrConfidencePercent = res.data.confidence_percent;
                     this.ocrRawText           = res.data.raw_text;
-                    this.ocrIsMocked          = res.data.is_mocked ?? false;
                     this.ocrProcessed         = true;
 
                     // Sincroniza o calendário com a data extraída pelo OCR
