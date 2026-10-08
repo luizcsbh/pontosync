@@ -47,7 +47,8 @@ class PointRecordController extends Controller
 
         $tz = config('app.timezone', 'America/Sao_Paulo');
 
-        $today = Carbon::today($tz)->format('Y-m-d');
+        $now = Carbon::now($tz);
+        $today = $now->format('Y-m-d');
         $workDay = $this->workDayService->getOrCreateWorkDay($user, $today);
         $workDay->load('pointRecords');
 
@@ -55,12 +56,22 @@ class PointRecordController extends Controller
             $defaultType = $this->pointRecordService->getNextExpectedType($workDay) ?? PointRecord::TYPE_ENTRY;
         }
 
+        $yesterday = Carbon::yesterday($tz);
+
         return view('point-records.create', [
-            'defaultType' => $defaultType,
-            'mode'        => $mode,
-            'todayDate'   => Carbon::today($tz)->format('d/m/Y'),
-            'currentTime' => Carbon::now($tz)->format('H:i'),
-            'typeOptions' => PointRecord::typeOptions(),
+            'defaultType'    => $defaultType,
+            'mode'           => $mode,
+            'todayDate'      => $now->format('d/m/Y'),
+            'todayYmd'       => $today,
+            'todayYear'      => (int) $now->format('Y'),
+            'todayMonth'     => (int) $now->format('n'),
+            'todayDay'       => (int) $now->format('j'),
+            'yesterdayDate'  => $yesterday->format('d/m/Y'),
+            'yesterdayYear'  => (int) $yesterday->format('Y'),
+            'yesterdayMonth' => (int) $yesterday->format('n'),
+            'yesterdayDay'   => (int) $yesterday->format('j'),
+            'currentTime'    => $now->format('H:i'),
+            'typeOptions'    => PointRecord::typeOptions(),
         ]);
     }
 

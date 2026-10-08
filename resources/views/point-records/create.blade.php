@@ -30,36 +30,35 @@
             <button type="button" @click="nextMonth()" class="p-1.5 hover:bg-white/20 rounded-lg transition text-sm font-bold">›</button>
         </div>
 
-        {{-- Nomes dos dias da semana --}}
+        {{-- Nomes dos dias da semana: Dom (0) a Sáb (6) --}}
         <div class="grid grid-cols-7 text-center border-b border-slate-100 bg-slate-50">
-            <template x-for="d in ['D','S','T','Q','Q','S','S']">
-                <div class="py-2 text-[11px] font-bold text-slate-400 uppercase" x-text="d"></div>
+            <template x-for="d in ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb']" :key="d">
+                <div class="py-2 text-[11px] font-bold uppercase"
+                     :class="d === 'Dom' || d === 'Sáb' ? 'text-rose-400' : (d === 'Qui' ? 'text-blue-700 font-extrabold' : 'text-slate-500')"
+                     x-text="d"></div>
             </template>
         </div>
 
-        {{-- Grid de dias --}}
+        {{-- Grid de dias (alinhado rigorosamente pelo dia da semana) --}}
         <div class="grid grid-cols-7 p-2 gap-1">
-            {{-- Padding células vazias antes do dia 1 --}}
-            <template x-for="_ in Array(calendarStartPad).fill(0)" :key="'pad-' + _">
-                <div></div>
-            </template>
-
-            {{-- Dias do mês --}}
-            <template x-for="day in daysInMonth" :key="'day-' + day">
-                <button
-                    type="button"
-                    @click="selectDay(day)"
-                    :disabled="isFutureDay(day)"
-                    :class="{
-                        'bg-blue-600 text-white font-black shadow-md scale-105': isSelectedDay(day),
-                        'bg-blue-50 text-blue-700 font-bold ring-1 ring-blue-300': isTodayDay(day) && !isSelectedDay(day),
-                        'text-slate-300 cursor-not-allowed': isFutureDay(day),
-                        'hover:bg-slate-100 text-slate-700 font-semibold': !isFutureDay(day) && !isSelectedDay(day),
-                        'text-rose-400': isWeekend(day) && !isSelectedDay(day) && !isFutureDay(day),
-                    }"
-                    class="h-9 w-full rounded-xl text-xs transition-all duration-100 flex items-center justify-center"
-                    x-text="day">
-                </button>
+            <template x-for="cell in calendarCells" :key="cell.key">
+                <div class="h-9 w-full flex items-center justify-center">
+                    <button
+                        x-show="cell.type === 'day'"
+                        type="button"
+                        @click="selectDay(cell.day)"
+                        :disabled="cell.type === 'day' && isFutureDay(cell.day)"
+                        :class="{
+                            'bg-blue-600 text-white font-black shadow-md scale-105': cell.type === 'day' && isSelectedDay(cell.day),
+                            'bg-blue-50 text-blue-700 font-bold ring-1 ring-blue-300': cell.type === 'day' && isTodayDay(cell.day) && !isSelectedDay(cell.day),
+                            'text-slate-300 cursor-not-allowed': cell.type === 'day' && isFutureDay(cell.day),
+                            'hover:bg-slate-100 text-slate-700 font-semibold': cell.type === 'day' && !isFutureDay(cell.day) && !isSelectedDay(cell.day),
+                            'text-rose-500': cell.type === 'day' && isWeekend(cell.day) && !isSelectedDay(cell.day) && !isFutureDay(cell.day),
+                        }"
+                        class="h-9 w-full rounded-xl text-xs transition-all duration-100 flex items-center justify-center"
+                        x-text="cell.day || ''">
+                    </button>
+                </div>
             </template>
         </div>
 
@@ -281,12 +280,20 @@
 @push('scripts')
 <script>
 function pointRegistrationApp() {
-    // Constantes de data/hora vindas do PHP
-    const SERVER_TODAY    = '{{ Carbon\Carbon::today()->format('Y-m-d') }}';
-    const SERVER_DATE_BR  = '{{ Carbon\Carbon::today()->format('d/m/Y') }}';
-    const SERVER_TIME     = '{{ Carbon\Carbon::now()->format('H:i') }}';
+    // Constantes de data/hora vindas do PHP (timezone America/Sao_Paulo garantido)
+    const SERVER_DATE_BR   = '{{ $todayDate }}';
+    const SERVER_TIME      = '{{ $currentTime }}';
+    const TODAY_YEAR       = {{ $todayYear }};
+    const TODAY_MONTH_IDX  = {{ $todayMonth - 1 }}; // 0-indexed para JS
+    const TODAY_DAY        = {{ $todayDay }};
+    const YESTERDAY_YEAR   = {{ $yesterdayYear }};
+    const YESTERDAY_M_IDX  = {{ $yesterdayMonth - 1 }};
+    const YESTERDAY_DAY    = {{ $yesterdayDay }};
 
-    // Dias da semana abreviados (pt-BR)
+    // Nomes dos dias da semana e meses em pt-BR
+    const WEEKDAYS_PT = [
+        'Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado'
+    ];
     const MONTHS_PT = [
         'Janeiro','Fevereiro','Março','Abril','Maio','Junho',
         'Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'
@@ -316,20 +323,19 @@ function pointRegistrationApp() {
         ocrRawText: '',
 
         // ── Calendário ──
-        calendarYear: 0,
-        calendarMonth: 0,   // 0-indexed
-        selectedYear: 0,
-        selectedMonth: 0,
-        selectedDay: 0,
+        calendarYear: TODAY_YEAR,
+        calendarMonth: TODAY_MONTH_IDX,   // 0-indexed
+        selectedYear: TODAY_YEAR,
+        selectedMonth: TODAY_MONTH_IDX,
+        selectedDay: TODAY_DAY,
 
         // ──────────────────────────────────────────
         init() {
-            const today = new Date(SERVER_TODAY + 'T00:00:00');
-            this.calendarYear  = today.getFullYear();
-            this.calendarMonth = today.getMonth();
-            this.selectedYear  = today.getFullYear();
-            this.selectedMonth = today.getMonth();
-            this.selectedDay   = today.getDate();
+            this.calendarYear  = TODAY_YEAR;
+            this.calendarMonth = TODAY_MONTH_IDX;
+            this.selectedYear  = TODAY_YEAR;
+            this.selectedMonth = TODAY_MONTH_IDX;
+            this.selectedDay   = TODAY_DAY;
         },
 
         // ──────── CALENDÁRIO ────────────────────
@@ -342,15 +348,43 @@ function pointRegistrationApp() {
             return new Date(this.calendarYear, this.calendarMonth + 1, 0).getDate();
         },
 
-        /** Índice do dia da semana do dia 1 (0=Dom, 6=Sáb) */
-        get calendarStartPad() {
-            return new Date(this.calendarYear, this.calendarMonth, 1).getDay();
+        /**
+         * Gera matriz plana de células alinhadas com as 7 colunas (Dom a Sáb).
+         * Garante que Quinta-feira (08/10/2026) fique exatamente na coluna "Qui".
+         */
+        get calendarCells() {
+            const cells = [];
+            // getDay() retorna 0 (Dom) a 6 (Sáb). Para 01/10/2026 = 4 (Quinta-feira).
+            const firstDow = new Date(this.calendarYear, this.calendarMonth, 1).getDay();
+            const totalDays = new Date(this.calendarYear, this.calendarMonth + 1, 0).getDate();
+
+            // Células vazias de padding antes do dia 1 com chave única garantida
+            for (let i = 0; i < firstDow; i++) {
+                cells.push({
+                    type: 'empty',
+                    key: `pad-${this.calendarYear}-${this.calendarMonth}-${i}`,
+                    day: null
+                });
+            }
+
+            // Dias válidos do mês
+            for (let day = 1; day <= totalDays; day++) {
+                cells.push({
+                    type: 'day',
+                    key: `day-${this.calendarYear}-${this.calendarMonth}-${day}`,
+                    day: day
+                });
+            }
+
+            return cells;
         },
 
         get selectedDateLabel() {
-            const d = String(this.selectedDay).padStart(2,'0');
-            const m = String(this.selectedMonth + 1).padStart(2,'0');
-            return `${d}/${m}/${this.selectedYear}`;
+            const d = String(this.selectedDay).padStart(2, '0');
+            const m = String(this.selectedMonth + 1).padStart(2, '0');
+            const dow = new Date(this.selectedYear, this.selectedMonth, this.selectedDay).getDay();
+            const dayName = WEEKDAYS_PT[dow];
+            return `${dayName}, ${d}/${m}/${this.selectedYear}`;
         },
 
         isSelectedDay(day) {
@@ -360,16 +394,17 @@ function pointRegistrationApp() {
         },
 
         isTodayDay(day) {
-            const today = new Date(SERVER_TODAY + 'T00:00:00');
-            return day === today.getDate()
-                && this.calendarMonth === today.getMonth()
-                && this.calendarYear  === today.getFullYear();
+            return this.calendarYear  === TODAY_YEAR
+                && this.calendarMonth === TODAY_MONTH_IDX
+                && day === TODAY_DAY;
         },
 
         isFutureDay(day) {
-            const today = new Date(SERVER_TODAY + 'T00:00:00');
-            const candidate = new Date(this.calendarYear, this.calendarMonth, day);
-            return candidate > today;
+            if (this.calendarYear > TODAY_YEAR) return true;
+            if (this.calendarYear < TODAY_YEAR) return false;
+            if (this.calendarMonth > TODAY_MONTH_IDX) return true;
+            if (this.calendarMonth < TODAY_MONTH_IDX) return false;
+            return day > TODAY_DAY;
         },
 
         isWeekend(day) {
@@ -382,11 +417,12 @@ function pointRegistrationApp() {
             this.selectedYear  = this.calendarYear;
             this.selectedMonth = this.calendarMonth;
             this.selectedDay   = day;
-            // Atualiza o campo data do formulário
-            const d = String(day).padStart(2,'0');
-            const m = String(this.calendarMonth + 1).padStart(2,'0');
+
+            // Atualiza o campo data do formulário no padrão DD/MM/AAAA
+            const d = String(day).padStart(2, '0');
+            const m = String(this.calendarMonth + 1).padStart(2, '0');
             this.dateInput = `${d}/${m}/${this.calendarYear}`;
-            // Se OCR já foi feito com outra data, marcar que o dado mudou
+
             if (this.ocrProcessed) this.ocrProcessed = false;
         },
 
@@ -400,10 +436,9 @@ function pointRegistrationApp() {
         },
 
         nextMonth() {
-            const today = new Date(SERVER_TODAY + 'T00:00:00');
-            const isCurrentMonth = this.calendarYear === today.getFullYear()
-                                && this.calendarMonth === today.getMonth();
-            if (isCurrentMonth) return; // não avança além do mês atual
+            const isCurrentMonth = this.calendarYear === TODAY_YEAR
+                                && this.calendarMonth === TODAY_MONTH_IDX;
+            if (isCurrentMonth) return; // Não navega para mês futuro
             if (this.calendarMonth === 11) {
                 this.calendarMonth = 0;
                 this.calendarYear++;
@@ -413,18 +448,15 @@ function pointRegistrationApp() {
         },
 
         goToday() {
-            const today = new Date(SERVER_TODAY + 'T00:00:00');
-            this.calendarYear  = today.getFullYear();
-            this.calendarMonth = today.getMonth();
-            this.selectDay(today.getDate());
+            this.calendarYear  = TODAY_YEAR;
+            this.calendarMonth = TODAY_MONTH_IDX;
+            this.selectDay(TODAY_DAY);
         },
 
         goYesterday() {
-            const yesterday = new Date(SERVER_TODAY + 'T00:00:00');
-            yesterday.setDate(yesterday.getDate() - 1);
-            this.calendarYear  = yesterday.getFullYear();
-            this.calendarMonth = yesterday.getMonth();
-            this.selectDay(yesterday.getDate());
+            this.calendarYear  = YESTERDAY_YEAR;
+            this.calendarMonth = YESTERDAY_M_IDX;
+            this.selectDay(YESTERDAY_DAY);
         },
 
         // ──────── MODO ──────────────────────────
