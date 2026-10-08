@@ -9,6 +9,8 @@ class OcrResult
         public readonly ?string $time,
         public readonly float $confidence,
         public readonly string $rawText,
+        /** Indica que os dados foram gerados por FakeOcrService (não por OCR real) */
+        public readonly bool $isMocked = false,
     ) {}
 
     public function isHighConfidence(): bool
@@ -39,10 +41,11 @@ class OcrResult
     public function toArray(): array
     {
         return [
-            'date' => $this->date,
-            'time' => $this->time,
+            'date'       => $this->date,
+            'time'       => $this->time,
             'confidence' => $this->confidence,
-            'raw_text' => $this->rawText,
+            'raw_text'   => $this->rawText,
+            'is_mocked'  => $this->isMocked,
         ];
     }
 }

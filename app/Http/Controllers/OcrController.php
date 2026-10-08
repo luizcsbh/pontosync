@@ -56,10 +56,11 @@ class OcrController extends Controller
                     'time'               => $ocrResult->time ?? Carbon::now()->format('H:i'),
                     'confidence'         => $ocrResult->confidence,
                     'confidence_percent' => $ocrResult->getConfidencePercent(),
-                    'is_high_confidence' => $ocrResult->isHighConfidence(),
+                    'is_high_confidence'   => $ocrResult->isHighConfidence(),
                     'is_medium_confidence' => $ocrResult->isMediumConfidence(),
-                    'is_low_confidence'  => $ocrResult->isLowConfidence(),
+                    'is_low_confidence'    => $ocrResult->isLowConfidence(),
                     'raw_text'           => $ocrResult->rawText,
+                    'is_mocked'          => $ocrResult->isMocked,
                     'auto_confirm'       => config('ocr.auto_confirm', false) && $ocrResult->isHighConfidence(),
                 ],
             ]);
