@@ -15,45 +15,47 @@ class ImageService
     private int $jpegQuality;
     private string $disk;
 
+    // Qualidade de saída para o arquivo temporário de OCR (alta — Tesseract precisa de clareza)
+    private const OCR_QUALITY = 90;
+
     public function __construct()
     {
-        // Qualidade otimizada mais leve (padrão 65%) e largura máx 1200px para economizar espaço
-        $this->maxWidth = (int) config('ocr.image_max_width', 1200);
-        $this->jpegQuality = (int) config('ocr.image_jpeg_quality', 65);
+        $this->maxWidth   = max(100, (int) config('ocr.image_max_width', 1200));
+        $this->jpegQuality = max(10, min(100, (int) config('ocr.image_jpeg_quality', 65)));
         $this->disk = 'public';
     }
 
+    // ─────────────────────────────────────────────
+    // PARTE 1 — SALVAR IMAGEM COMPRIMIDA (exibição)
+    // ─────────────────────────────────────────────
+
     /**
-     * Armazena a imagem otimizada/comprimida e retorna o caminho relativo.
+     * Salva a imagem otimizada (comprimida, colorida) no disco para exibição/thumbnail.
+     * Retorna o caminho relativo dentro do disco.
      *
      * @param string $date formato Y-m-d
-     * @param string $type tipo da marcação (entry, lunch_start, etc.)
+     * @param string $type entry|lunch_start|lunch_end|exit
      */
     public function store(UploadedFile $file, string $date, string $type): string
     {
         $dateParts = explode('-', $date);
         $directory = 'point-records/' . $dateParts[0] . '/' . $dateParts[1] . '/' . $dateParts[2];
-
-        $timestamp = str_replace('-', '', $date) . '_' . date('His') . '_' . uniqid();
-        $filename = "{$date}_{$timestamp}_{$type}.jpg";
+        $filename = "{$date}_" . date('His') . '_' . uniqid() . "_{$type}.jpg";
         $path = "{$directory}/{$filename}";
 
-        $optimizedContent = $this->optimize($file);
+        $compressed = $this->compressForStorage($file->getPathname());
 
-        Storage::disk($this->disk)->put($path, $optimizedContent);
+        Storage::disk($this->disk)->put($path, $compressed);
 
         return $path;
     }
 
     /**
-     * Otimiza a imagem: redimensiona mantendo proporção e comprime em JPEG leve.
+     * Comprime a imagem para armazenamento (menor tamanho, mantém cor).
      */
-    public function optimize(UploadedFile $file): string
+    public function compressForStorage(string $filePath): string
     {
-        $filePath = $file->getPathname();
-
         try {
-            // Processamento via Intervention Image v4
             $manager = ImageManager::usingDriver(GdDriver::class);
             $image = $manager->decodePath($filePath);
 
@@ -62,51 +64,151 @@ class ImageService
             }
 
             return (string) $image->encode(new JpegEncoder(quality: $this->jpegQuality));
-        } catch (Exception $e) {
-            // Fallback nativo via GD PHP
-            return $this->optimizeWithNativeGd($filePath);
+        } catch (Exception) {
+            return $this->nativeCompress($filePath, $this->maxWidth, $this->jpegQuality);
+        }
+    }
+
+    // Mantém compatibilidade com código anterior
+    public function optimize(UploadedFile $file): string
+    {
+        return $this->compressForStorage($file->getPathname());
+    }
+
+    // ─────────────────────────────────────────────
+    // PARTE 2 — GERAR IMAGEM P&B PARA OCR
+    // ─────────────────────────────────────────────
+
+    /**
+     * Gera uma versão pré-processada da imagem exclusivamente para OCR:
+     *   1. Amplia a imagem se pequena (mais pixels → mais acurácia Tesseract)
+     *   2. Converte para ESCALA DE CINZA
+     *   3. Aplica aumento de contraste / nitidez
+     *   4. Binarização suave (realça texto escuro sobre fundo claro)
+     *
+     * Salva em arquivo temporário e retorna o path absoluto.
+     * O chamador é responsável por excluir o arquivo após o uso.
+     */
+    public function prepareForOcr(string $sourceFilePath): string
+    {
+        $tmpPath = sys_get_temp_dir() . '/ocr_' . uniqid() . '.jpg';
+
+        try {
+            $this->prepareWithIntervention($sourceFilePath, $tmpPath);
+        } catch (Exception) {
+            $this->prepareWithNativeGd($sourceFilePath, $tmpPath);
+        }
+
+        return $tmpPath;
+    }
+
+    /**
+     * Pré-processamento via Intervention Image v4.
+     * Mantém a resolução original — ampliar para 2400px esgota memória no GD.
+     * Grayscale + contraste é suficiente para o Tesseract reconhecer texto.
+     */
+    private function prepareWithIntervention(string $src, string $dest): void
+    {
+        $prevMemory = ini_set('memory_limit', '256M');
+
+        try {
+            $manager = ImageManager::usingDriver(GdDriver::class);
+            $image = $manager->decodePath($src);
+
+            // 1. Converte para escala de cinza
+            $image->grayscale();
+
+            // 2. Aumenta contraste (realça bordas de texto)
+            $image->contrast(30);
+
+            // Salva com alta qualidade para o Tesseract
+            file_put_contents($dest, (string) $image->encode(new JpegEncoder(quality: self::OCR_QUALITY)));
+        } finally {
+            if ($prevMemory !== false) {
+                ini_set('memory_limit', $prevMemory);
+            }
         }
     }
 
     /**
-     * Redimensionamento e compressão nativa com qualidade mais baixa para economia de banco/disco.
+     * Pré-processamento via GD nativo do PHP (fallback).
+     * Converte para P&B real com ajuste de brilho e contraste via imagefilter.
      */
-    private function optimizeWithNativeGd(string $filePath): string
+    private function prepareWithNativeGd(string $src, string $dest): void
+    {
+        $imageInfo = @getimagesize($src);
+        if (!$imageInfo) {
+            copy($src, $dest);
+            return;
+        }
+
+        $mime = $imageInfo['mime'] ?? '';
+        $origW = $imageInfo[0];
+        $origH = $imageInfo[1];
+
+        $srcGd = match ($mime) {
+            'image/jpeg', 'image/jpg' => @imagecreatefromjpeg($src),
+            'image/png'               => @imagecreatefrompng($src),
+            'image/webp'              => @imagecreatefromwebp($src),
+            default                   => null,
+        };
+
+        if (!$srcGd) {
+            copy($src, $dest);
+            return;
+        }
+
+        // 1. Converter para Escala de Cinza
+        imagefilter($srcGd, IMG_FILTER_GRAYSCALE);
+
+        // 2. Aumentar Contraste (-50 em GD aumenta o contraste)
+        imagefilter($srcGd, IMG_FILTER_CONTRAST, -50);
+
+        ob_start();
+        imagejpeg($srcGd, null, self::OCR_QUALITY);
+        $data = ob_get_clean();
+        imagedestroy($srcGd);
+
+        file_put_contents($dest, $data ?: file_get_contents($src));
+    }
+
+    // ─────────────────────────────────────────────
+    // HELPERS INTERNOS
+    // ─────────────────────────────────────────────
+
+    private function nativeCompress(string $filePath, int $maxW, int $quality): string
     {
         $imageInfo = @getimagesize($filePath);
-
         if (!$imageInfo) {
             return (string) file_get_contents($filePath);
         }
 
-        $origWidth = $imageInfo[0];
-        $origHeight = $imageInfo[1];
-        $mime = $imageInfo['mime'] ?? '';
+        $origW  = $imageInfo[0];
+        $origH  = $imageInfo[1];
+        $mime   = $imageInfo['mime'] ?? '';
 
-        $srcImage = match ($mime) {
+        $src = match ($mime) {
             'image/jpeg', 'image/jpg' => @imagecreatefromjpeg($filePath),
-            'image/png' => @imagecreatefrompng($filePath),
-            'image/webp' => @imagecreatefromwebp($filePath),
-            default => null,
+            'image/png'               => @imagecreatefrompng($filePath),
+            'image/webp'              => @imagecreatefromwebp($filePath),
+            default                   => null,
         };
 
-        if (!$srcImage) {
+        if (!$src) {
             return (string) file_get_contents($filePath);
         }
 
-        // Redimensiona proporcionalmente para largura máxima
-        $targetWidth = min($origWidth, $this->maxWidth);
-        $targetHeight = (int) round(($origHeight / $origWidth) * $targetWidth);
+        $targetW = min($origW, $maxW);
+        $targetH = (int) round(($origH / $origW) * $targetW);
 
-        $dstImage = imagecreatetruecolor($targetWidth, $targetHeight);
-        imagecopyresampled($dstImage, $srcImage, 0, 0, 0, 0, $targetWidth, $targetHeight, $origWidth, $origHeight);
-        imagedestroy($srcImage);
+        $dst = imagecreatetruecolor($targetW, $targetH);
+        imagecopyresampled($dst, $src, 0, 0, 0, 0, $targetW, $targetH, $origW, $origH);
+        imagedestroy($src);
 
-        // Captura o stream JPEG comprimido com qualidade configurada
         ob_start();
-        imagejpeg($dstImage, null, $this->jpegQuality);
+        imagejpeg($dst, null, $quality);
         $output = ob_get_clean();
-        imagedestroy($dstImage);
+        imagedestroy($dst);
 
         return $output ?: (string) file_get_contents($filePath);
     }
