@@ -2,9 +2,12 @@
 
 namespace App\Services;
 
+use Exception;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
-use Intervention\Image\Laravel\Facades\Image;
+use Intervention\Image\Drivers\Gd\Driver as GdDriver;
+use Intervention\Image\Encoders\JpegEncoder;
+use Intervention\Image\ImageManager;
 
 class ImageService
 {
@@ -40,17 +43,71 @@ class ImageService
     }
 
     /**
-     * Otimiza a imagem: redimensiona e comprime.
+     * Otimiza a imagem: redimensiona mantendo proporção e comprime em JPEG.
      */
     public function optimize(UploadedFile $file): string
     {
-        $image = Image::read($file->getPathname());
+        $filePath = $file->getPathname();
 
-        // Redimensiona mantendo proporção se maior que o máximo
-        if ($image->width() > $this->maxWidth) {
-            $image->scaleDown(width: $this->maxWidth);
+        try {
+            // Tenta via Intervention Image v4
+            $manager = ImageManager::usingDriver(GdDriver::class);
+            $image = $manager->decodePath($filePath);
+
+            if ($image->width() > $this->maxWidth) {
+                $image->scaleDown(width: $this->maxWidth);
+            }
+
+            return (string) $image->encode(new JpegEncoder(quality: $this->jpegQuality));
+        } catch (Exception $e) {
+            // Fallback robusto nativo via GD PHP
+            return $this->optimizeWithNativeGd($filePath);
+        }
+    }
+
+    /**
+     * Redimensionamento e compressão nativa via extensão GD do PHP.
+     */
+    private function optimizeWithNativeGd(string $filePath): string
+    {
+        $imageInfo = @getimagesize($filePath);
+
+        if (!$imageInfo) {
+            return (string) file_get_contents($filePath);
         }
 
-        return $image->toJpeg($this->jpegQuality)->toString();
+        $origWidth = $imageInfo[0];
+        $origHeight = $imageInfo[1];
+        $mime = $imageInfo['mime'] ?? '';
+
+        $srcImage = match ($mime) {
+            'image/jpeg', 'image/jpg' => @imagecreatefromjpeg($filePath),
+            'image/png' => @imagecreatefrompng($filePath),
+            'image/webp' => @imagecreatefromwebp($filePath),
+            default => null,
+        };
+
+        if (!$srcImage) {
+            return (string) file_get_contents($filePath);
+        }
+
+        // Calcula novas dimensões se exceder a largura máxima
+        if ($origWidth > $this->maxWidth) {
+            $newWidth = $this->maxWidth;
+            $newHeight = (int) round(($origHeight / $origWidth) * $newWidth);
+
+            $dstImage = imagecreatetruecolor($newWidth, $newHeight);
+            imagecopyresampled($dstImage, $srcImage, 0, 0, 0, 0, $newWidth, $newHeight, $origWidth, $origHeight);
+            imagedestroy($srcImage);
+            $srcImage = $dstImage;
+        }
+
+        // Captura o stream JPEG comprimido
+        ob_start();
+        imagejpeg($srcImage, null, $this->jpegQuality);
+        $output = ob_get_clean();
+        imagedestroy($srcImage);
+
+        return $output ?: (string) file_get_contents($filePath);
     }
 }
