@@ -6,6 +6,7 @@ use App\Contracts\FileStorageInterface;
 use App\Contracts\OcrServiceInterface;
 use App\Services\Ocr\FakeOcrService;
 use App\Services\Ocr\GoogleCloudVisionOcrService;
+use App\Services\Ocr\TesseractOcrService;
 use App\Services\Storage\LocalFileStorageService;
 use Illuminate\Support\ServiceProvider;
 
@@ -16,6 +17,7 @@ class AppServiceProvider extends ServiceProvider
         // Bind OCR service based on env configuration
         $this->app->bind(OcrServiceInterface::class, function () {
             return match (config('ocr.provider')) {
+                'tesseract' => new TesseractOcrService(),
                 'google_vision' => new GoogleCloudVisionOcrService(),
                 default => new FakeOcrService(),
             };
